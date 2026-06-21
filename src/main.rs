@@ -1,64 +1,65 @@
-use std::time::Duration;
-use futures::StreamExt;
-use tokio::sync::mpsc;
+use app::App;
 use bollard::{
     Docker,
-    config::{ContainerSummary, ContainerStatsResponse},
-    query_parameters::{ListContainersOptionsBuilder, StatsOptionsBuilder}
+    config::{ContainerStatsResponse, ContainerSummary, ContainerSummaryStateEnum},
+    query_parameters::{ListContainersOptionsBuilder, StatsOptionsBuilder},
 };
+use futures::StreamExt;
 use ratatui::crossterm::event;
 use ratatui::crossterm::event::KeyCode;
 use ratatui::widgets::TableState;
-use app::App;
+use std::time::Duration;
+use tokio::sync::mpsc;
 
-mod ui;
 mod app;
+mod ui;
 
 pub enum ContainerState {
     Running,
     Paused,
-    Exited
+    Exited,
 }
 
 pub struct ContainerData {
     pub name: String,
     pub id: String,
-    pub state: ContainerState,
+    pub state: ContainerSummaryStateEnum,
     pub status: String,
-    pub image: String
+    pub image: String,
 }
 
 enum AppEvent {
     Tick,
     Key(event::KeyEvent),
     ContainerLoad(Vec<ContainerData>),
+    #[allow(dead_code)]
     DockerError(String),
 }
 
-fn transform_to_container_data(container: ContainerSummary, _stats: Option<ContainerStatsResponse>) -> ContainerData {
-    let name = container.names.unwrap_or_default()[0].clone();
+fn transform_to_container_data(
+    container: ContainerSummary,
+    _stats: Option<ContainerStatsResponse>,
+) -> ContainerData {
+    let name = container
+        .names
+        .as_ref()
+        .and_then(|names| names.first())
+        .cloned()
+        .unwrap_or_else(|| "UNKOWN".to_string());
+
     let id = container.id.unwrap_or_default();
     let status = container.status.unwrap_or_default();
     let image = container.image.unwrap_or_default();
-
-    let state = {
-        if status.contains("Up") {
-            if status.contains("Paused") {
-                ContainerState::Paused
-            } else {
-                ContainerState::Running
-            }
-        } else {
-            ContainerState::Exited
-        }
-    };
+    let state = container
+        .state
+        .unwrap_or_else(|| ContainerSummaryStateEnum::EMPTY);
 
     ContainerData {
         name,
         id,
         state,
         status,
-        image
+        image,
     }
 }
 
@@ -71,15 +72,13 @@ async fn main() {
         loop {
             if event::poll(Duration::from_millis(50)).unwrap() {
                 if let event::Event::Key(key) = event::read().unwrap() {
-                    if key.kind == event::KeyEventKind::Release {
-                        continue;
+                    if key.kind != event::KeyEventKind::Release {
+                        let _ = tx_key.send(AppEvent::Key(key)).await;
                     }
-                    let _ = tx_key.send(AppEvent::Key(key)).await;
                 }
             }
-
             let _ = tx_key.send(AppEvent::Tick).await;
-            let _ =  tokio::time::sleep(Duration::from_millis(250));
+            let _ = tokio::time::sleep(Duration::from_millis(33)).await;
         }
     });
 
@@ -88,9 +87,7 @@ async fn main() {
         let docker = Docker::connect_with_local_defaults().unwrap();
 
         loop {
-            let list_config = ListContainersOptionsBuilder::new()
-                .all(true)
-                .build();
+            let list_config = ListContainersOptionsBuilder::new().all(true).build();
 
             match docker.list_containers(Some(list_config)).await {
                 Ok(container_summery) => {
@@ -103,7 +100,8 @@ async fn main() {
                                 .one_shot(true)
                                 .build();
 
-                            let mut stats_stream = docker_clone.stats(&container_id, Some(stats_options));
+                            let mut stats_stream =
+                                docker_clone.stats(&container_id, Some(stats_options));
                             let stats = stats_stream.next().await.and_then(|res| res.ok());
 
                             transform_to_container_data(container, stats)
@@ -112,46 +110,51 @@ async fn main() {
 
                     let payload = futures::future::join_all(stat_futures).await;
                     let _ = tx_docker.send(AppEvent::ContainerLoad(payload)).await;
-                },
+                }
                 Err(err) => {
                     let _ = tx_docker.send(AppEvent::DockerError(err.to_string())).await;
                 }
             }
-            let _ = tokio::time::sleep(Duration::from_millis(250)).await;
+            let _ = tokio::time::sleep(Duration::from_millis(750)).await;
         }
     });
 
     let mut terminal = ratatui::init();
     let mut app = App::new();
     let mut table_state = TableState::default();
-    table_state.select_first();
-    table_state.select_first_column();
+    table_state.select_next();
 
     loop {
         if let Some(event) = rx.recv().await {
-            match event {
-                AppEvent::ContainerLoad(containers) => {
-                    app.containers = containers;
-                },
-                AppEvent::Key(key) => {
-                    match key.code {
-                        KeyCode::Char('q') => {
-                            ratatui::restore();
-                            std::process::exit(0);
-                        },
-                        KeyCode::Char('j') => {
-                            table_state.select_next();
-                        },
-                        KeyCode::Char('k') => {
-                            table_state.select_previous();
-                        },
-                        _ => {}
-                    }
-                }
-                _ => {}
+            handle_event(event, &mut app, &mut table_state);
+
+            while let Ok(event) = rx.try_recv() {
+                handle_event(event, &mut app, &mut table_state);
             }
         }
 
         let _ = terminal.draw(|frame| ui::render(frame, &app, &mut table_state));
+    }
+}
+
+fn handle_event(event: AppEvent, app: &mut App, table_state: &mut TableState) {
+    match event {
+        AppEvent::ContainerLoad(containers) => {
+            app.containers = containers;
+        }
+        AppEvent::Key(key) => match key.code {
+            KeyCode::Char('q') => {
+                ratatui::restore();
+                std::process::exit(0);
+            }
+            KeyCode::Char('j') => {
+                table_state.select_next();
+            }
+            KeyCode::Char('k') => {
+                table_state.select_previous();
+            }
+            _ => {}
+        },
+        _ => {}
     }
 }
