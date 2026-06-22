@@ -4,13 +4,13 @@ use ratatui::{
     Frame,
     layout::{Constraint, Layout, Rect},
     style::{Color, Style, Stylize},
-    text::Line,
-    widgets::{Block, Borders, Row, Table, TableState},
+    text::{Text, Line},
+    widgets::{Block, Borders, Paragraph, Row, Table, TableState},
 };
 
 pub fn render(frame: &mut Frame, app: &App, table_state: &mut TableState) {
-    let layout = Layout::vertical([Constraint::Fill(1), Constraint::Percentage(5)]);
-    let [main, footer] = frame.area().layout(&layout);
+    let layout = Layout::vertical([Constraint::Fill(1), Constraint::Percentage(50)]);
+    let [main, bottom] = frame.area().layout(&layout);
 
     let instructions = Line::from(vec![
         " Down ".into(),
@@ -30,6 +30,15 @@ pub fn render(frame: &mut Frame, app: &App, table_state: &mut TableState) {
 
     frame.render_widget(main_block, main);
     render_table(frame, main_inner_area, app, table_state);
+    render_log(frame, bottom, app);
+}
+
+fn render_log(frame: &mut Frame, area: Rect, app: &App) {
+    let text : Vec<_> = app.current_logs.clone().into_iter().map(|line| Line::from(line)).collect();
+    let paragraph = Paragraph::new(text)
+        .block(Block::new().borders(Borders::ALL).title(" Logs "));
+
+    frame.render_widget(paragraph, area);
 }
 
 fn render_table(frame: &mut Frame, area: Rect, app: &App, table_state: &mut TableState) {
@@ -57,7 +66,10 @@ fn render_table(frame: &mut Frame, area: Rect, app: &App, table_state: &mut Tabl
             state,
             container.status.clone(),
             container.cpu_percentage.clone(),
-            format!("{:>10} / {:<10}", container.memory_usage, container.memory_limit),
+            format!(
+                "{:>10} / {:<10}",
+                container.memory_usage, container.memory_limit
+            ),
             container.id.clone(),
             container.image.clone(),
         ]);
@@ -72,7 +84,7 @@ fn render_table(frame: &mut Frame, area: Rect, app: &App, table_state: &mut Tabl
         Constraint::Fill(1),
         Constraint::Fill(1),
         Constraint::Fill(1),
-        Constraint::Fill(1),
+        Constraint::Fill(2),
     ];
 
     let table = Table::new(rows, widths)

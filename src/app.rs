@@ -2,14 +2,16 @@ use crate::ContainerData;
 
 pub struct App {
     pub containers: Vec<ContainerData>,
-    selected_index: usize,
+    pub container_idx: usize,
+    pub current_logs: Vec<String>,
 }
 
 impl App {
     pub fn new() -> Self {
         Self {
             containers: Vec::new(),
-            selected_index: 0,
+            container_idx: 0,
+            current_logs: Vec::new(),
         }
     }
 }
