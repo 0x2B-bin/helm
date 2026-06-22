@@ -25,6 +25,8 @@
               rust-analyzer
             ];
           };
+
+          packages.default = (pkgs.callPackage ./package.nix {});
         };
       };
 }
