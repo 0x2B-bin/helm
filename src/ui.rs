@@ -33,7 +33,7 @@ pub fn render(frame: &mut Frame, app: &App, table_state: &mut TableState) {
 }
 
 fn render_table(frame: &mut Frame, area: Rect, app: &App, table_state: &mut TableState) {
-    let header = Row::new(["Name", "State", "Status", "ID", "Image"])
+    let header = Row::new(["Name", "State", "Status", "CPU%", "MEM%", "ID", "Image"])
         .style(Style::new().bold())
         .bottom_margin(1);
 
@@ -56,13 +56,18 @@ fn render_table(frame: &mut Frame, area: Rect, app: &App, table_state: &mut Tabl
             container.name.clone(),
             state,
             container.status.clone(),
+            container.cpu_percentage.clone(),
+            format!("{:>10} / {:<10}", container.memory_usage, container.memory_limit),
             container.id.clone(),
             container.image.clone(),
         ]);
+
         rows.push(row);
     }
 
     let widths = [
+        Constraint::Fill(1),
+        Constraint::Fill(1),
         Constraint::Fill(1),
         Constraint::Fill(1),
         Constraint::Fill(1),

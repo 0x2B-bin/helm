@@ -1,7 +1,9 @@
 use app::App;
 use bollard::{
     Docker,
-    config::{ContainerStatsResponse, ContainerSummary, ContainerSummaryStateEnum},
+    config::{
+        ContainerCpuStats, ContainerStatsResponse, ContainerSummary, ContainerSummaryStateEnum,
+    },
     query_parameters::{ListContainersOptionsBuilder, StatsOptionsBuilder},
 };
 use futures::StreamExt;
@@ -26,6 +28,9 @@ pub struct ContainerData {
     pub state: ContainerSummaryStateEnum,
     pub status: String,
     pub image: String,
+    pub cpu_percentage: String,
+    pub memory_usage: String,
+    pub memory_limit: String
 }
 
 enum AppEvent {
@@ -38,7 +43,7 @@ enum AppEvent {
 
 fn transform_to_container_data(
     container: ContainerSummary,
-    _stats: Option<ContainerStatsResponse>,
+    stats: Option<ContainerStatsResponse>,
 ) -> ContainerData {
     let name = container
         .names
@@ -54,12 +59,72 @@ fn transform_to_container_data(
         .state
         .unwrap_or_else(|| ContainerSummaryStateEnum::EMPTY);
 
+    let mut cpu_percentage = "0.00%".to_string();
+    let mut memory_usage = "0".to_string();
+    let mut memory_limit = "0".to_string();
+
+    let get_cpu_total_usage =
+        |s: &ContainerCpuStats| -> Option<u64> { Some(s.cpu_usage.as_ref()?.total_usage?) };
+
+    let format_bytes = |bytes: u64| -> String {
+        let mut size = bytes as f64;
+        let units = ["B", "KiB", "MiB", "GiB", "TiB"];
+        let mut unit_idx = 0;
+
+        while size > 1024.0 && unit_idx < units.len() {
+            size /= 1024.0;
+            unit_idx += 1;
+        }
+
+        format!("{:.2} {}", size, units[unit_idx])
+    };
+
+    if let Some(s) = stats {
+        match (s.cpu_stats, s.precpu_stats) {
+            (Some(curr_cpu_stats), Some(prev_cpu_stats)) => {
+                match (
+                    get_cpu_total_usage(&curr_cpu_stats),
+                    get_cpu_total_usage(&prev_cpu_stats),
+                ) {
+                    (Some(curr_usage), Some(prev_usage)) => {
+                        let cpu_delta = curr_usage.saturating_sub(prev_usage);
+                        let system_delta = curr_cpu_stats
+                            .system_cpu_usage
+                            .unwrap_or(0)
+                            .saturating_sub(prev_cpu_stats.system_cpu_usage.unwrap_or(0));
+
+                        if system_delta > 0 && cpu_delta > 0 {
+                            let percent = (cpu_delta as f64 / system_delta as f64) * 100.0;
+                            cpu_percentage = format!("{:.2}%", percent);
+                        }
+                    }
+                    _ => {}
+                }
+
+                match s.memory_stats {
+                    Some(memory_stats) => {
+                        let usage = memory_stats.usage.unwrap_or(0);
+                        let limit = memory_stats.limit.unwrap_or(0);
+
+                        memory_usage = format_bytes(usage);
+                        memory_limit = format_bytes(limit);
+                    }
+                    None => {}
+                }
+            }
+            _ => {}
+        }
+    }
+
     ContainerData {
         name,
         id,
         state,
         status,
         image,
+        cpu_percentage,
+        memory_usage,
+        memory_limit
     }
 }
 
