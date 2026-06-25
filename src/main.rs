@@ -1,4 +1,4 @@
-use app::App;
+use app::{App, View};
 use bollard::{
     Docker,
     config::{
@@ -10,7 +10,7 @@ use bollard::{
 use futures::{StreamExt, stream::BoxStream};
 use ratatui::crossterm::event;
 use ratatui::crossterm::event::KeyCode;
-use ratatui::widgets::TableState;
+use ratatui::widgets::{TableState, ListState};
 use std::time::Duration;
 use tokio::sync::mpsc;
 
@@ -206,7 +206,7 @@ async fn main() {
 
                         let log_options = LogsOptionsBuilder::new()
                             .follow(true)
-                            .tail("100")
+                            .tail("50")
                             .stdout(true)
                             .build();
 
@@ -232,18 +232,19 @@ async fn main() {
     let mut terminal = ratatui::init();
     let mut app = App::new();
     let mut table_state = TableState::default();
+    let mut list_state = ListState::default();
     table_state.select_next();
 
     loop {
         if let Some(event) = rx.recv().await {
-            handle_event(event, &mut app, &mut table_state, &tx_ui);
+            handle_event(event, &mut app, &mut table_state, &mut list_state, &tx_ui);
 
             while let Ok(event) = rx.try_recv() {
-                handle_event(event, &mut app, &mut table_state, &tx_ui);
+                handle_event(event, &mut app, &mut table_state, &mut list_state, &tx_ui);
             }
         }
 
-        let _ = terminal.draw(|frame| ui::render(frame, &app, &mut table_state));
+        let _ = terminal.draw(|frame| ui::render(frame, &app, &mut table_state, &mut list_state));
     }
 }
 
@@ -251,41 +252,80 @@ fn handle_event(
     event: AppEvent,
     app: &mut App,
     table_state: &mut TableState,
+    log_list_state: &mut ListState,
     tx_ui: &mpsc::Sender<UiCommand>,
 ) {
     match event {
         AppEvent::ContainerLoad(containers) => {
             app.containers = containers;
+
         }
         AppEvent::NewLogLine(line) => {
             app.current_logs.push(line);
+
+            if app.log_autoscroll && app.current_logs.len() > 0 {
+                app.log_idx = app.current_logs.len() - 1;
+            }
         }
-        AppEvent::Key(key) => match key.code {
-            KeyCode::Char('q') => {
-                ratatui::restore();
-                std::process::exit(0);
-            }
-            KeyCode::Char('j') => {
-                if app.container_idx < app.containers.len() - 1 {
-                    app.container_idx += 1;
-                    app.current_logs.clear();
-                    let _ = tx_ui.try_send(UiCommand::SwitchLogTarget(
-                        app.containers[app.container_idx].id.clone(),
-                    ));
+        AppEvent::Key(key) => match app.active_view {
+            View::Containers => match key.code {
+                KeyCode::Char('q') => {
+                    ratatui::restore();
+                    std::process::exit(0);
                 }
-                table_state.select_next();
-            }
-            KeyCode::Char('k') => {
-                if app.container_idx > 0 {
-                    app.container_idx -= 1;
-                    app.current_logs.clear();
-                    let _ = tx_ui.try_send(UiCommand::SwitchLogTarget(
-                        app.containers[app.container_idx].id.clone(),
-                    ));
+                KeyCode::Char('j') => {
+                    if app.container_idx < app.containers.len() - 1 {
+                        app.container_idx += 1;
+                        app.current_logs.clear();
+                        let _ = tx_ui.try_send(UiCommand::SwitchLogTarget(
+                            app.containers[app.container_idx].id.clone(),
+                        ));
+                    }
+                    table_state.select_next();
                 }
-                table_state.select_previous();
+                KeyCode::Char('k') => {
+                    if app.container_idx > 0 {
+                        app.container_idx -= 1;
+                        app.current_logs.clear();
+                        let _ = tx_ui.try_send(UiCommand::SwitchLogTarget(
+                            app.containers[app.container_idx].id.clone(),
+                        ));
+                    }
+                    table_state.select_previous();
+                }
+                KeyCode::Char('l') => {
+                    app.log_idx = app.current_logs.len() - 1;
+                    log_list_state.select_last();
+                    app.active_view = View::Log;
+                }
+                _ => {}
             }
-            _ => {}
+            View::Log => match key.code {
+                KeyCode::Char('q') => {
+                    ratatui::restore();
+                    std::process::exit(0);
+                }
+                KeyCode::Char('j') => {
+                    if app.log_idx < app.current_logs.len() - 1 {
+                        app.log_idx += 1;
+                        log_list_state.select_next();
+                    }
+                    if app.log_idx == app.current_logs.len() - 1 {
+                        app.log_autoscroll = true;
+                    }
+                }
+                KeyCode::Char('k') => {
+                    if app.log_idx > 0 {
+                        app.log_autoscroll = false;
+                        app.log_idx -= 1;
+                        log_list_state.select_previous();
+                    }
+                }
+                KeyCode::Char('c') => {
+                    app.active_view = View::Containers;
+                }
+                _ => {}
+            }
         },
         _ => {}
     }
