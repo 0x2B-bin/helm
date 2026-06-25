@@ -9,18 +9,17 @@ use ratatui::{
 };
 
 pub fn render(frame: &mut Frame, app: &App, table_state: &mut TableState, list_state: &mut ListState) {
-    let layout = Layout::vertical([Constraint::Fill(1), Constraint::Percentage(50)]);
-    let [main, bottom] = frame.area().layout(&layout);
+    let main_layout = Layout::vertical([Constraint::Fill(1), Constraint::Percentage(50)]);
+    let [top, bottom] = frame.area().layout(&main_layout);
 
-    
+    let top_layout = Layout::horizontal([Constraint::Fill(1), Constraint::Percentage(10)]);
+    let [containers_area, control_area]  = top.layout(&top_layout);
 
-    render_table(frame, main, app, table_state);
+    render_table(frame, containers_area, app, table_state);
     render_log(frame, bottom, app, list_state);
 }
 
 fn render_log(frame: &mut Frame, area: Rect, app: &App, list_state: &mut ListState) {
-    // TODO: Instead of cloning the whole Vec, create method to only clone visible lines
-
     if app.log_autoscroll {
         list_state.select_last();
     }
@@ -40,7 +39,9 @@ fn render_log(frame: &mut Frame, area: Rect, app: &App, list_state: &mut ListSta
         highlight_style = highlight_style.fg(Color::Red);
     }
 
-    let items = List::new(app.current_logs.clone())
+    let log_lines : Vec<&str> = app.current_logs.iter().map(|line| line.as_str()).collect();
+
+    let items = List::new(log_lines)
         .block(block)
         .highlight_style(highlight_style);
 
@@ -76,7 +77,7 @@ fn render_table(frame: &mut Frame, area: Rect, app: &App, table_state: &mut Tabl
                 "{:>10} / {:<10}",
                 container.memory_usage, container.memory_limit
             ),
-            container.id.clone(),
+            container.id[0..6].to_string(),
             container.image.clone(),
         ]);
 
@@ -84,13 +85,13 @@ fn render_table(frame: &mut Frame, area: Rect, app: &App, table_state: &mut Tabl
     }
 
     let widths = [
+        Constraint::Length(25),
+        Constraint::Length(11),
+        Constraint::Length(30),
+        Constraint::Length(6),
+        Constraint::Length(23),
+        Constraint::Length(7),
         Constraint::Fill(1),
-        Constraint::Fill(1),
-        Constraint::Fill(1),
-        Constraint::Fill(1),
-        Constraint::Fill(1),
-        Constraint::Fill(1),
-        Constraint::Fill(2),
     ];
 
     let instructions = Line::from(vec![
@@ -117,7 +118,6 @@ fn render_table(frame: &mut Frame, area: Rect, app: &App, table_state: &mut Tabl
         row_highlight_style = row_highlight_style.on_red().bold(); 
         block = block.border_style(Style::new().blue());
     }
-
 
     let table = Table::new(rows, widths)
         .header(header)
