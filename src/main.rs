@@ -294,7 +294,9 @@ fn handle_event(
                     table_state.select_previous();
                 }
                 KeyCode::Char('l') => {
-                    app.log_idx = app.current_logs.len() - 1;
+                    if app.current_logs.len() > 0 {
+                        app.log_idx = app.current_logs.len() - 1;
+                    }
                     log_list_state.select_last();
                     app.active_view = View::Log;
                 }
@@ -306,11 +308,11 @@ fn handle_event(
                     std::process::exit(0);
                 }
                 KeyCode::Char('j') => {
-                    if app.log_idx < app.current_logs.len() - 1 {
+                    if app.log_idx + 1 < app.current_logs.len() {
                         app.log_idx += 1;
                         log_list_state.select_next();
                     }
-                    if app.log_idx == app.current_logs.len() - 1 {
+                    if app.log_idx + 1 == app.current_logs.len() {
                         app.log_autoscroll = true;
                     }
                 }
