@@ -4,17 +4,23 @@ use bollard::{
     config::{
         ContainerCpuStats, ContainerStatsResponse, ContainerSummary, ContainerSummaryStateEnum,
     },
-    container::LogOutput,
-    query_parameters::{ListContainersOptionsBuilder, LogsOptionsBuilder, StatsOptionsBuilder},
+    query_parameters::{ListContainersOptionsBuilder, StatsOptionsBuilder},
 };
-use futures::{StreamExt, stream::BoxStream};
+use docker_worker::{DockerCMD, DockerWorker};
+use futures::StreamExt;
 use ratatui::crossterm::event;
 use ratatui::crossterm::event::KeyCode;
-use ratatui::widgets::{TableState, ListState};
+use ratatui::widgets::{ListState, TableState};
 use std::time::Duration;
 use tokio::sync::mpsc;
 
+use crate::{
+    AppEvent::ContainerLoad,
+    docker_worker::{DockerCMD::SwitchLogTarget, DockerHandle},
+};
+
 mod app;
+mod docker_worker;
 mod ui;
 
 pub enum ContainerState {
@@ -27,6 +33,7 @@ pub struct ContainerData {
     pub name: String,
     pub id: String,
     pub state: ContainerSummaryStateEnum,
+    pub state_string: String,
     pub status: String,
     pub image: String,
     pub cpu_percentage: String,
@@ -39,12 +46,8 @@ enum AppEvent {
     Key(event::KeyEvent),
     ContainerLoad(Vec<ContainerData>),
     NewLogLine(String),
-    #[allow(dead_code)]
+    //#[allow(dead_code)]
     DockerError(String),
-}
-
-enum UiCommand {
-    SwitchLogTarget(String),
 }
 
 fn transform_to_container_data(
@@ -64,7 +67,7 @@ fn transform_to_container_data(
     let state = container
         .state
         .unwrap_or_else(|| ContainerSummaryStateEnum::EMPTY);
-
+    let state_string = format!("{}", state).to_lowercase();
     let mut cpu_percentage = "0.00%".to_string();
     let mut memory_usage = "0".to_string();
     let mut memory_limit = "0".to_string();
@@ -126,6 +129,7 @@ fn transform_to_container_data(
         name,
         id,
         state,
+        state_string,
         status,
         image,
         cpu_percentage,
@@ -136,6 +140,8 @@ fn transform_to_container_data(
 
 #[tokio::main]
 async fn main() {
+    let docker = Docker::connect_with_local_defaults().unwrap();
+
     let (tx, mut rx) = mpsc::channel::<AppEvent>(100);
 
     let tx_key = tx.clone();
@@ -154,16 +160,15 @@ async fn main() {
     });
 
     let tx_docker = tx.clone();
+    let docker_1 = docker.clone();
     tokio::spawn(async move {
-        let docker = Docker::connect_with_local_defaults().unwrap();
-
         loop {
             let list_config = ListContainersOptionsBuilder::new().all(true).build();
 
-            match docker.list_containers(Some(list_config)).await {
+            match docker_1.list_containers(Some(list_config)).await {
                 Ok(container_summery) => {
                     let stat_futures = container_summery.into_iter().map(|container| {
-                        let docker_clone = docker.clone();
+                        let docker_clone = docker_1.clone();
                         async move {
                             let container_id = container.id.clone().unwrap_or_default();
                             let stats_options = StatsOptionsBuilder::default()
@@ -190,57 +195,43 @@ async fn main() {
         }
     });
 
-    let (tx_ui, mut rx_ui) = mpsc::channel::<UiCommand>(100);
-    let tx_log = tx.clone();
-    tokio::spawn(async move {
-        let docker = Docker::connect_with_local_defaults().unwrap();
-        let mut log_handle: Option<tokio::task::JoinHandle<()>> = None;
-
-        loop {
-            if let Some(ui_command) = rx_ui.recv().await {
-                match ui_command {
-                    UiCommand::SwitchLogTarget(container_id) => {
-                        if let Some(handle) = log_handle {
-                            handle.abort();
-                        }
-
-                        let log_options = LogsOptionsBuilder::new()
-                            .follow(true)
-                            .tail("50")
-                            .stdout(true)
-                            .build();
-
-                        let mut log_stream = docker.logs(&container_id, Some(log_options));
-                        let tx_log_clone = tx_log.clone();
-                        let handle = tokio::spawn(async move {
-                            while let Some(Ok(log_output)) = log_stream.next().await {
-                                if let LogOutput::StdOut { message: bytes } = log_output {
-                                    let line =
-                                        String::from_utf8_lossy(&Vec::from(bytes)).to_string();
-                                    let _ = tx_log_clone.send(AppEvent::NewLogLine(line)).await;
-                                }
-                            }
-                        });
-
-                        log_handle = Some(handle)
-                    }
-                }
-            }
-        }
-    });
+    let (tx_docker_cmd, rx_docker_cmd) = mpsc::channel::<DockerCMD>(50);
+    let tx_docker_app_event = tx.clone();
+    let docker_2 = docker.clone();
+    DockerWorker::spawn(rx_docker_cmd, tx_docker_app_event, docker_2);
+    let docker_handle = DockerHandle::new(tx_docker_cmd);
 
     let mut terminal = ratatui::init();
     let mut app = App::new();
     let mut table_state = TableState::default();
     let mut list_state = ListState::default();
-    table_state.select_next();
+    let mut init = true;
 
     loop {
         if let Some(event) = rx.recv().await {
-            handle_event(event, &mut app, &mut table_state, &mut list_state, &tx_ui);
+            handle_event(
+                event,
+                &mut app,
+                &mut table_state,
+                &mut list_state,
+                &docker_handle,
+                &mut init,
+            );
 
+            let mut drained = 0;
             while let Ok(event) = rx.try_recv() {
-                handle_event(event, &mut app, &mut table_state, &mut list_state, &tx_ui);
+                handle_event(
+                    event,
+                    &mut app,
+                    &mut table_state,
+                    &mut list_state,
+                    &docker_handle,
+                    &mut init,
+                );
+                drained += 1;
+                if drained > 20 {
+                    break;
+                }
             }
         }
 
@@ -253,18 +244,33 @@ fn handle_event(
     app: &mut App,
     table_state: &mut TableState,
     log_list_state: &mut ListState,
-    tx_ui: &mpsc::Sender<UiCommand>,
+    docker_handle: &DockerHandle,
+    init: &mut bool,
 ) {
     match event {
         AppEvent::ContainerLoad(containers) => {
             app.containers = containers;
+            if app.container_idx > app.containers.len() && !app.containers.is_empty() {
+                app.container_idx = app.containers.len() - 1;
+            }
 
+            if *init {
+                docker_handle.send_cmd(SwitchLogTarget(
+                    app.containers[app.container_idx].id.clone(),
+                ));
+
+                if !app.containers.is_empty() {
+                    table_state.select(Some(app.container_idx));
+                }
+                *init = false;
+            }
         }
         AppEvent::NewLogLine(line) => {
             app.current_logs.push(line);
 
             if app.log_autoscroll && app.current_logs.len() > 0 {
                 app.log_idx = app.current_logs.len() - 1;
+                log_list_state.select(Some(app.log_idx));
             }
         }
         AppEvent::Key(key) => match app.active_view {
@@ -277,21 +283,21 @@ fn handle_event(
                     if app.container_idx < app.containers.len() - 1 {
                         app.container_idx += 1;
                         app.current_logs.clear();
-                        let _ = tx_ui.try_send(UiCommand::SwitchLogTarget(
+                        docker_handle.send_cmd(DockerCMD::SwitchLogTarget(
                             app.containers[app.container_idx].id.clone(),
                         ));
                     }
-                    table_state.select_next();
+                    table_state.select(Some(app.container_idx));
                 }
                 KeyCode::Char('k') => {
                     if app.container_idx > 0 {
                         app.container_idx -= 1;
                         app.current_logs.clear();
-                        let _ = tx_ui.try_send(UiCommand::SwitchLogTarget(
+                        docker_handle.send_cmd(DockerCMD::SwitchLogTarget(
                             app.containers[app.container_idx].id.clone(),
                         ));
                     }
-                    table_state.select_previous();
+                    table_state.select(Some(app.container_idx));
                 }
                 KeyCode::Char('l') => {
                     if app.current_logs.len() > 0 {
@@ -301,7 +307,7 @@ fn handle_event(
                     app.active_view = View::Log;
                 }
                 _ => {}
-            }
+            },
             View::Log => match key.code {
                 KeyCode::Char('q') => {
                     ratatui::restore();
@@ -327,7 +333,7 @@ fn handle_event(
                     app.active_view = View::Containers;
                 }
                 _ => {}
-            }
+            },
         },
         _ => {}
     }

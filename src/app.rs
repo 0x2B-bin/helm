@@ -2,7 +2,7 @@ use crate::ContainerData;
 
 pub enum View {
     Containers,
-    Log
+    Log,
 }
 
 pub struct App {
@@ -11,7 +11,7 @@ pub struct App {
     pub current_logs: Vec<String>,
     pub log_autoscroll: bool,
     pub log_idx: usize,
-    pub active_view: View
+    pub active_view: View,
 }
 
 impl App {
@@ -22,7 +22,7 @@ impl App {
             current_logs: Vec::new(),
             log_autoscroll: true,
             log_idx: 0,
-            active_view: View::Containers
+            active_view: View::Containers,
         }
     }
 }
