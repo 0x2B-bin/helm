@@ -1,4 +1,5 @@
 use crate::ContainerData;
+use ratatui::widgets::{ListState, TableState};
 
 pub enum View {
     Containers,
@@ -12,6 +13,12 @@ pub struct App {
     pub log_autoscroll: bool,
     pub log_idx: usize,
     pub active_view: View,
+}
+
+#[derive(Default)]
+pub struct UiState {
+    pub container_table: TableState,
+    pub log_list: ListState,
 }
 
 impl App {

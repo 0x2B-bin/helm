@@ -1,4 +1,4 @@
-use crate::{App, app::View};
+use crate::{App, app::UiState, app::View};
 use bollard::config::ContainerSummaryStateEnum;
 use ratatui::{
     Frame,
@@ -8,20 +8,15 @@ use ratatui::{
     widgets::{Block, Borders, Cell, List, ListState, Row, Table, TableState},
 };
 
-pub fn render(
-    frame: &mut Frame,
-    app: &App,
-    table_state: &mut TableState,
-    list_state: &mut ListState,
-) {
+pub fn render(frame: &mut Frame, app: &App, ui_state: &mut UiState) {
     let main_layout = Layout::vertical([Constraint::Fill(1), Constraint::Percentage(50)]);
     let [top, bottom] = frame.area().layout(&main_layout);
 
     let top_layout = Layout::horizontal([Constraint::Percentage(95), Constraint::Percentage(5)]);
     let [containers_area, control_area] = top.layout(&top_layout);
 
-    render_table(frame, containers_area, app, table_state);
-    render_log(frame, bottom, app, list_state);
+    render_table(frame, containers_area, app, &mut ui_state.container_table);
+    render_log(frame, bottom, app, &mut ui_state.log_list);
 }
 
 fn render_log(frame: &mut Frame, area: Rect, app: &App, list_state: &mut ListState) {

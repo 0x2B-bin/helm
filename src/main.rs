@@ -1,4 +1,4 @@
-use app::{App, View};
+use app::{App, UiState};
 use bollard::{
     Docker,
     config::{
@@ -9,18 +9,14 @@ use bollard::{
 use docker_worker::{DockerCMD, DockerWorker};
 use futures::StreamExt;
 use ratatui::crossterm::event;
-use ratatui::crossterm::event::KeyCode;
-use ratatui::widgets::{ListState, TableState};
 use std::time::Duration;
 use tokio::sync::mpsc;
 
-use crate::{
-    AppEvent::ContainerLoad,
-    docker_worker::{DockerCMD::SwitchLogTarget, DockerHandle},
-};
+use crate::docker_worker::DockerHandle;
 
 mod app;
 mod docker_worker;
+mod event_handler;
 mod ui;
 
 pub enum ContainerState {
@@ -203,138 +199,14 @@ async fn main() {
 
     let mut terminal = ratatui::init();
     let mut app = App::new();
-    let mut table_state = TableState::default();
-    let mut list_state = ListState::default();
-    let mut init = true;
+    let mut ui_state = UiState::default();
+    let mut event_handler = event_handler::EventHandler::new(rx);
 
     loop {
-        if let Some(event) = rx.recv().await {
-            handle_event(
-                event,
-                &mut app,
-                &mut table_state,
-                &mut list_state,
-                &docker_handle,
-                &mut init,
-            );
-
-            let mut drained = 0;
-            while let Ok(event) = rx.try_recv() {
-                handle_event(
-                    event,
-                    &mut app,
-                    &mut table_state,
-                    &mut list_state,
-                    &docker_handle,
-                    &mut init,
-                );
-                drained += 1;
-                if drained > 20 {
-                    break;
-                }
-            }
-        }
-
-        let _ = terminal.draw(|frame| ui::render(frame, &app, &mut table_state, &mut list_state));
-    }
-}
-
-fn handle_event(
-    event: AppEvent,
-    app: &mut App,
-    table_state: &mut TableState,
-    log_list_state: &mut ListState,
-    docker_handle: &DockerHandle,
-    init: &mut bool,
-) {
-    match event {
-        AppEvent::ContainerLoad(containers) => {
-            app.containers = containers;
-            if app.container_idx > app.containers.len() && !app.containers.is_empty() {
-                app.container_idx = app.containers.len() - 1;
-            }
-
-            if *init {
-                docker_handle.send_cmd(SwitchLogTarget(
-                    app.containers[app.container_idx].id.clone(),
-                ));
-
-                if !app.containers.is_empty() {
-                    table_state.select(Some(app.container_idx));
-                }
-                *init = false;
-            }
-        }
-        AppEvent::NewLogLine(line) => {
-            app.current_logs.push(line);
-
-            if app.log_autoscroll && app.current_logs.len() > 0 {
-                app.log_idx = app.current_logs.len() - 1;
-                log_list_state.select(Some(app.log_idx));
-            }
-        }
-        AppEvent::Key(key) => match app.active_view {
-            View::Containers => match key.code {
-                KeyCode::Char('q') => {
-                    ratatui::restore();
-                    std::process::exit(0);
-                }
-                KeyCode::Char('j') => {
-                    if app.container_idx < app.containers.len() - 1 {
-                        app.container_idx += 1;
-                        app.current_logs.clear();
-                        docker_handle.send_cmd(DockerCMD::SwitchLogTarget(
-                            app.containers[app.container_idx].id.clone(),
-                        ));
-                    }
-                    table_state.select(Some(app.container_idx));
-                }
-                KeyCode::Char('k') => {
-                    if app.container_idx > 0 {
-                        app.container_idx -= 1;
-                        app.current_logs.clear();
-                        docker_handle.send_cmd(DockerCMD::SwitchLogTarget(
-                            app.containers[app.container_idx].id.clone(),
-                        ));
-                    }
-                    table_state.select(Some(app.container_idx));
-                }
-                KeyCode::Char('l') => {
-                    if app.current_logs.len() > 0 {
-                        app.log_idx = app.current_logs.len() - 1;
-                    }
-                    log_list_state.select_last();
-                    app.active_view = View::Log;
-                }
-                _ => {}
-            },
-            View::Log => match key.code {
-                KeyCode::Char('q') => {
-                    ratatui::restore();
-                    std::process::exit(0);
-                }
-                KeyCode::Char('j') => {
-                    if app.log_idx + 1 < app.current_logs.len() {
-                        app.log_idx += 1;
-                        log_list_state.select_next();
-                    }
-                    if app.log_idx + 1 == app.current_logs.len() {
-                        app.log_autoscroll = true;
-                    }
-                }
-                KeyCode::Char('k') => {
-                    if app.log_idx > 0 {
-                        app.log_autoscroll = false;
-                        app.log_idx -= 1;
-                        log_list_state.select_previous();
-                    }
-                }
-                KeyCode::Char('c') => {
-                    app.active_view = View::Containers;
-                }
-                _ => {}
-            },
-        },
-        _ => {}
+        event_handler
+            .next(&mut app, &docker_handle, &mut ui_state)
+            .await;
+        event_handler.drain(&mut app, &docker_handle, &mut ui_state, 10);
+        let _ = terminal.draw(|frame| ui::render(frame, &app, &mut ui_state));
     }
 }
