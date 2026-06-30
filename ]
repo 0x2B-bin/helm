@@ -9,10 +9,7 @@ use tokio::{
 
 pub enum DockerCMD {
     SwitchLogTarget(String),
-    StopContainer(String),
-    StartContainer(String),
-    RestartContainer(String),
-    RemoveContainer(String),
+    StopContainer(String)
 }
 
 pub struct DockerHandle {
@@ -83,54 +80,8 @@ impl DockerWorker {
                     });
                     log_handle = Some(handle)
                 },
-                // TODO: Shorten later, too lazy rn
                 DockerCMD::StopContainer(container_id) => {
-                    let docker = self.docker.clone();
-                    let tx = self.sender.clone();
-                    tokio::spawn(async move {
-                        let res = docker.stop_container(&container_id, None).await;
-                        if let Err(err) = res {
-                            let _ = tx.send(AppEvent::DockerError(err.to_string())).await;
-                        } else {
-                            let _ = tx.send(AppEvent::TransitionComplete(container_id)).await;
-                        }
-                    });
-                },
-                DockerCMD::StartContainer(container_id) => {
-                    let docker = self.docker.clone();
-                    let tx = self.sender.clone();
-                    tokio::spawn(async move {
-                        let res = docker.start_container(&container_id, None).await;
-                        if let Err(err) = res {
-                            let _ = tx.send(AppEvent::DockerError(err.to_string())).await;
-                        } else { 
-                            let _ = tx.send(AppEvent::TransitionComplete(container_id)).await;
-                        }
-                    });
-                },
-                DockerCMD::RestartContainer(container_id) => {
-                    let docker = self.docker.clone();
-                    let tx = self.sender.clone();
-                    tokio::spawn(async move {
-                        let res = docker.restart_container(&container_id, None).await;
-                        if let Err(err) = res {
-                            let _ = tx.send(AppEvent::DockerError(err.to_string())).await;
-                        } else {
-                            let _ = tx.send(AppEvent::TransitionComplete(container_id)).await;
-                        }
-                    });
-                },
-                DockerCMD::RemoveContainer(container_id) => {
-                    let docker = self.docker.clone();
-                    let tx = self.sender.clone();
-                    tokio::spawn(async move {
-                        let res = docker.remove_container(&container_id, None).await;
-                        if let Err(err) = res {
-                            let _ = tx.send(AppEvent::DockerError(err.to_string())).await;
-                        } else {
-                            let _ = tx.send(AppEvent::TransitionComplete(container_id)).await;
-                        }
-                    });
+                    self.docker.stop_container(&container_id, options);
                 }
             }
         }

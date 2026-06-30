@@ -1,6 +1,6 @@
 use crate::{
     AppEvent, DockerCMD,
-    app::{App, UiState, View},
+    app::{App, UiState, View, TransitioningState},
     docker_worker::DockerHandle,
 };
 use ratatui::crossterm::event::KeyCode;
@@ -81,7 +81,10 @@ impl EventHandler {
                     app.log_idx = app.current_logs.len() - 1;
                     ui_state.log_list.select(Some(app.log_idx));
                 }
-            }
+            },
+            AppEvent::TransitionComplete(container_id) => {
+                let _ = app.transitioning_containers.remove(&container_id);
+            },
             AppEvent::Key(key) => match app.active_view {
                 View::Containers => match key.code {
                     KeyCode::Char('q') => {
@@ -114,6 +117,33 @@ impl EventHandler {
                         }
                         ui_state.log_list.select_last();
                         app.active_view = View::Log;
+                    }
+                    KeyCode::Char('s') => {
+                        if !app.containers.is_empty() {
+                            let container_id = app.containers[app.container_idx].id.clone();
+                            docker_handle.send_cmd(DockerCMD::StopContainer(
+                                container_id.clone()
+                            ));
+                            app.transitioning_containers.insert(container_id, TransitioningState::Stopping);
+                        } 
+                    },
+                    KeyCode::Char('y') => {
+                        if !app.containers.is_empty() {
+                            let container_id = app.containers[app.container_idx].id.clone();
+                            docker_handle.send_cmd(DockerCMD::StartContainer(
+                                container_id.clone()
+                            ));
+                            app.transitioning_containers.insert(container_id, TransitioningState::Starting);
+                        }
+                    },
+                    KeyCode::Char('r') => {
+                        if !app.containers.is_empty() {
+                            let container_id = app.containers[app.container_idx].id.clone();
+                            docker_handle.send_cmd(DockerCMD::RestartContainer(
+                                container_id.clone()
+                            ));
+                            app.transitioning_containers.insert(container_id, TransitioningState::Restarting);
+                        }
                     }
                     _ => {}
                 },

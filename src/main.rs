@@ -19,11 +19,7 @@ mod docker_worker;
 mod event_handler;
 mod ui;
 
-pub enum ContainerState {
-    Running,
-    Paused,
-    Exited,
-}
+
 
 pub struct ContainerData {
     pub name: String,
@@ -42,6 +38,7 @@ enum AppEvent {
     Key(event::KeyEvent),
     ContainerLoad(Vec<ContainerData>),
     NewLogLine(String),
+    TransitionComplete(String),
     //#[allow(dead_code)]
     DockerError(String),
 }
@@ -138,7 +135,7 @@ fn transform_to_container_data(
 async fn main() {
     let docker = Docker::connect_with_local_defaults().unwrap();
 
-    let (tx, mut rx) = mpsc::channel::<AppEvent>(100);
+    let (tx, rx) = mpsc::channel::<AppEvent>(100);
 
     let tx_key = tx.clone();
     tokio::spawn(async move {

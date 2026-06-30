@@ -13,7 +13,7 @@ pub fn render(frame: &mut Frame, app: &App, ui_state: &mut UiState) {
     let [top, bottom] = frame.area().layout(&main_layout);
 
     let top_layout = Layout::horizontal([Constraint::Percentage(95), Constraint::Percentage(5)]);
-    let [containers_area, control_area] = top.layout(&top_layout);
+    let [containers_area, _control_area] = top.layout(&top_layout);
 
     render_table(frame, containers_area, app, &mut ui_state.container_table);
     render_log(frame, bottom, app, &mut ui_state.log_list);
@@ -62,22 +62,31 @@ fn render_table(frame: &mut Frame, area: Rect, app: &App, table_state: &mut Tabl
             });
 
     for container in &app.containers {
-        let text_color = match container.state {
-            ContainerSummaryStateEnum::RUNNING => Style::new().green(),
-            ContainerSummaryStateEnum::DEAD | ContainerSummaryStateEnum::EXITED => {
-                Style::new().red()
-            }
-            ContainerSummaryStateEnum::PAUSED
-            | ContainerSummaryStateEnum::STOPPING
-            | ContainerSummaryStateEnum::RESTARTING => Style::new().yellow(),
-            ContainerSummaryStateEnum::EMPTY | ContainerSummaryStateEnum::CREATED => {
-                Style::new().cyan()
-            }
-            _ => Style::new(),
-        };
+        let mut text_color = Style::new().light_blue();
+        let mut state = String::new();
 
-        if container.state_string.len() > state_max_width {
-            state_max_width = container.state_string.len()
+        if let Some(trans_state) = app.transitioning_containers.get(&container.id) {
+            state = format!("{}", trans_state);
+        } else {
+            state = container.state_string.clone();
+            text_color = match container.state {
+                ContainerSummaryStateEnum::RUNNING => Style::new().green(),
+                ContainerSummaryStateEnum::DEAD | ContainerSummaryStateEnum::EXITED => {
+                    Style::new().red()
+                }
+                ContainerSummaryStateEnum::PAUSED
+                | ContainerSummaryStateEnum::STOPPING
+                | ContainerSummaryStateEnum::RESTARTING => Style::new().yellow(),
+                ContainerSummaryStateEnum::EMPTY | ContainerSummaryStateEnum::CREATED => {
+                    Style::new().cyan()
+                }
+                _ => Style::new(),
+            };
+        }
+
+
+        if state.len() > state_max_width {
+            state_max_width = state.len();
         }
 
         if container.status.len() > status_max_width {
@@ -96,7 +105,7 @@ fn render_table(frame: &mut Frame, area: Rect, app: &App, table_state: &mut Tabl
 
         let row = Row::new(vec![
             Cell::from(container.name.as_str()),
-            Cell::from(container.state_string.as_str()).style(text_color),
+            Cell::from(state).style(text_color),
             Cell::from(container.status.as_str()),
             Cell::from(container.cpu_percentage.as_str()),
             Cell::from(format!(

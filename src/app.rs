@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+use std::fmt;
 use crate::ContainerData;
 use ratatui::widgets::{ListState, TableState};
 
@@ -6,6 +8,13 @@ pub enum View {
     Log,
 }
 
+pub enum TransitioningState {
+    Stopping,
+    Restarting,
+    Starting,
+}
+
+
 pub struct App {
     pub containers: Vec<ContainerData>,
     pub container_idx: usize,
@@ -13,6 +22,7 @@ pub struct App {
     pub log_autoscroll: bool,
     pub log_idx: usize,
     pub active_view: View,
+    pub transitioning_containers: HashMap<String, TransitioningState>,
 }
 
 #[derive(Default)]
@@ -30,6 +40,17 @@ impl App {
             log_autoscroll: true,
             log_idx: 0,
             active_view: View::Containers,
+            transitioning_containers: HashMap::new(),
+        }
+    }
+}
+
+impl fmt::Display for TransitioningState {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match &self {
+            TransitioningState::Stopping => write!(f, "stoppping"),
+            TransitioningState::Restarting => write!(f, "restarting"),
+            TransitioningState::Starting => write!(f, "starting"),
         }
     }
 }
