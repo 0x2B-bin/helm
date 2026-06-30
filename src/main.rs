@@ -19,8 +19,6 @@ mod docker_worker;
 mod event_handler;
 mod ui;
 
-
-
 pub struct ContainerData {
     pub name: String,
     pub id: String,

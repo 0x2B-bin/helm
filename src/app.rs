@@ -1,7 +1,7 @@
-use std::collections::HashMap;
-use std::fmt;
 use crate::ContainerData;
 use ratatui::widgets::{ListState, TableState};
+use std::collections::HashMap;
+use std::fmt;
 
 pub enum View {
     Containers,
@@ -13,7 +13,6 @@ pub enum TransitioningState {
     Restarting,
     Starting,
 }
-
 
 pub struct App {
     pub containers: Vec<ContainerData>,

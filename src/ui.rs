@@ -84,7 +84,6 @@ fn render_table(frame: &mut Frame, area: Rect, app: &App, table_state: &mut Tabl
             };
         }
 
-
         if state.len() > state_max_width {
             state_max_width = state.len();
         }

@@ -82,7 +82,7 @@ impl DockerWorker {
                         }
                     });
                     log_handle = Some(handle)
-                },
+                }
                 // TODO: Shorten later, too lazy rn
                 DockerCMD::StopContainer(container_id) => {
                     let docker = self.docker.clone();
@@ -95,7 +95,7 @@ impl DockerWorker {
                             let _ = tx.send(AppEvent::TransitionComplete(container_id)).await;
                         }
                     });
-                },
+                }
                 DockerCMD::StartContainer(container_id) => {
                     let docker = self.docker.clone();
                     let tx = self.sender.clone();
@@ -103,11 +103,11 @@ impl DockerWorker {
                         let res = docker.start_container(&container_id, None).await;
                         if let Err(err) = res {
                             let _ = tx.send(AppEvent::DockerError(err.to_string())).await;
-                        } else { 
+                        } else {
                             let _ = tx.send(AppEvent::TransitionComplete(container_id)).await;
                         }
                     });
-                },
+                }
                 DockerCMD::RestartContainer(container_id) => {
                     let docker = self.docker.clone();
                     let tx = self.sender.clone();
@@ -119,7 +119,7 @@ impl DockerWorker {
                             let _ = tx.send(AppEvent::TransitionComplete(container_id)).await;
                         }
                     });
-                },
+                }
                 DockerCMD::RemoveContainer(container_id) => {
                     let docker = self.docker.clone();
                     let tx = self.sender.clone();
