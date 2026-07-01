@@ -9,10 +9,10 @@ use ratatui::{
 };
 
 pub fn render(frame: &mut Frame, app: &App, ui_state: &mut UiState) {
-    let main_layout = Layout::vertical([Constraint::Fill(1), Constraint::Percentage(50)]);
+    let main_layout = Layout::vertical([Constraint::Fill(1), Constraint::Percentage(60)]);
     let [top, bottom] = frame.area().layout(&main_layout);
 
-    let top_layout = Layout::horizontal([Constraint::Fill(1), Constraint::Length(22)]);
+    let top_layout = Layout::horizontal([Constraint::Fill(1), Constraint::Max(22)]);
     let [containers_area, control_area] = top.layout(&top_layout);
 
     render_table(frame, containers_area, app, &mut ui_state.container_table);
@@ -129,20 +129,10 @@ fn render_table(frame: &mut Frame, area: Rect, app: &App, table_state: &mut Tabl
         Constraint::Fill(1),
     ];
 
-    let instructions = Line::from(vec![
-        " Down ".into(),
-        "<J>".blue().bold(),
-        " Up ".into(),
-        "<K>".blue().bold(),
-        " Toggle ".into(),
-        "<Enter> ".blue().bold(),
-    ]);
-
     let title = Line::from(vec![" C".blue().bold(), "ontainers ".white()]);
 
     let mut block = Block::new()
         .borders(Borders::ALL)
-        .title_bottom(instructions.centered())
         .title(title);
 
     let mut row_highlight_style = Style::new().white();
@@ -161,11 +151,17 @@ fn render_table(frame: &mut Frame, area: Rect, app: &App, table_state: &mut Tabl
 }
 
 fn render_controls(frame: &mut Frame, area: Rect, app: &App) {
-    let block = Block::new().borders(Borders::ALL).title(" Actions ");
-
-    let controls = Paragraph::new("hello")
-        .alignment(Alignment::Center)
-        .centered()
+    let block = Block::new()
+        .borders(Borders::ALL)
+        .title(" Actions ");
+    
+    let controls = Paragraph::new(vec![
+            Line::from(vec!["[".into(), "s".blue(), "]".into(), " Start/Stop".into()]),
+            Line::from(vec!["[".into(), "r".blue(), "]".into(), " Restart".into()]),
+            Line::from(vec!["[".into(), "x".blue(), "]".into(), " Remove".into()])
+        
+        ])
+        .alignment(Alignment::Left)
         .block(block);
 
     frame.render_widget(controls, area);
