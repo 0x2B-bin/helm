@@ -57,14 +57,14 @@ fn transform_to_container_data(
     let image = container.image.unwrap_or_default();
     let state = container
         .state
-        .unwrap_or_else(|| ContainerSummaryStateEnum::EMPTY);
+        .unwrap_or(ContainerSummaryStateEnum::EMPTY);
     let state_string = format!("{}", state).to_lowercase();
     let mut cpu_percentage = "0.00%".to_string();
     let mut memory_usage = "0".to_string();
     let mut memory_limit = "0".to_string();
 
     let get_cpu_total_usage =
-        |s: &ContainerCpuStats| -> Option<u64> { Some(s.cpu_usage.as_ref()?.total_usage?) };
+        |s: &ContainerCpuStats| -> Option<u64> { s.cpu_usage.as_ref()?.total_usage };
 
     let format_bytes = |bytes: u64| -> String {
         let mut size = bytes as f64;
@@ -79,40 +79,31 @@ fn transform_to_container_data(
         format!("{:.2} {}", size, units[unit_idx])
     };
 
-    if let Some(s) = stats {
-        match (s.cpu_stats, s.precpu_stats) {
-            (Some(curr_cpu_stats), Some(prev_cpu_stats)) => {
-                match (
-                    get_cpu_total_usage(&curr_cpu_stats),
-                    get_cpu_total_usage(&prev_cpu_stats),
-                ) {
-                    (Some(curr_usage), Some(prev_usage)) => {
-                        let cpu_delta = curr_usage.saturating_sub(prev_usage);
-                        let system_delta = curr_cpu_stats
-                            .system_cpu_usage
-                            .unwrap_or(0)
-                            .saturating_sub(prev_cpu_stats.system_cpu_usage.unwrap_or(0));
+    if let Some(s) = stats
+        && let (Some(curr_cpu_stats), Some(prev_cpu_stats)) = (s.cpu_stats, s.precpu_stats)
+    {
+        if let (Some(curr_usage), Some(prev_usage)) = (
+            get_cpu_total_usage(&curr_cpu_stats),
+            get_cpu_total_usage(&prev_cpu_stats),
+        ) {
+            let cpu_delta = curr_usage.saturating_sub(prev_usage);
+            let system_delta = curr_cpu_stats
+                .system_cpu_usage
+                .unwrap_or(0)
+                .saturating_sub(prev_cpu_stats.system_cpu_usage.unwrap_or(0));
 
-                        if system_delta > 0 && cpu_delta > 0 {
-                            let percent = (cpu_delta as f64 / system_delta as f64) * 100.0;
-                            cpu_percentage = format!("{:.2}%", percent);
-                        }
-                    }
-                    _ => {}
-                }
-
-                match s.memory_stats {
-                    Some(memory_stats) => {
-                        let usage = memory_stats.usage.unwrap_or(0);
-                        let limit = memory_stats.limit.unwrap_or(0);
-
-                        memory_usage = format_bytes(usage);
-                        memory_limit = format_bytes(limit);
-                    }
-                    None => {}
-                }
+            if system_delta > 0 && cpu_delta > 0 {
+                let percent = (cpu_delta as f64 / system_delta as f64) * 100.0;
+                cpu_percentage = format!("{:.2}%", percent);
             }
-            _ => {}
+        }
+
+        if let Some(memory_stats) = s.memory_stats {
+            let usage = memory_stats.usage.unwrap_or(0);
+            let limit = memory_stats.limit.unwrap_or(0);
+
+            memory_usage = format_bytes(usage);
+            memory_limit = format_bytes(limit);
         }
     }
 
@@ -138,12 +129,11 @@ async fn main() {
     let tx_key = tx.clone();
     tokio::spawn(async move {
         loop {
-            if event::poll(Duration::from_millis(50)).unwrap() {
-                if let event::Event::Key(key) = event::read().unwrap() {
-                    if key.kind != event::KeyEventKind::Release {
-                        let _ = tx_key.send(AppEvent::Key(key)).await;
-                    }
-                }
+            if event::poll(Duration::from_millis(50)).unwrap()
+                && let event::Event::Key(key) = event::read().unwrap()
+                && key.kind != event::KeyEventKind::Release
+            {
+                let _ = tx_key.send(AppEvent::Key(key)).await;
             }
             let _ = tx_key.send(AppEvent::Tick).await;
             let _ = tokio::time::sleep(Duration::from_millis(33)).await;

@@ -2,25 +2,26 @@ use crate::{App, app::UiState, app::View};
 use bollard::config::ContainerSummaryStateEnum;
 use ratatui::{
     Frame,
-    layout::{Constraint, Layout, Rect},
+    layout::{Alignment, Constraint, Layout, Rect},
     style::{Color, Style, Stylize},
     text::Line,
-    widgets::{Block, Borders, Cell, List, ListState, Row, Table, TableState},
+    widgets::{Block, Borders, Cell, List, ListState, Paragraph, Row, Table, TableState},
 };
 
 pub fn render(frame: &mut Frame, app: &App, ui_state: &mut UiState) {
     let main_layout = Layout::vertical([Constraint::Fill(1), Constraint::Percentage(50)]);
     let [top, bottom] = frame.area().layout(&main_layout);
 
-    let top_layout = Layout::horizontal([Constraint::Percentage(95), Constraint::Percentage(5)]);
-    let [containers_area, _control_area] = top.layout(&top_layout);
+    let top_layout = Layout::horizontal([Constraint::Fill(1), Constraint::Length(22)]);
+    let [containers_area, control_area] = top.layout(&top_layout);
 
     render_table(frame, containers_area, app, &mut ui_state.container_table);
     render_log(frame, bottom, app, &mut ui_state.log_list);
+    render_controls(frame, control_area, app);
 }
 
 fn render_log(frame: &mut Frame, area: Rect, app: &App, list_state: &mut ListState) {
-    let title = Line::from(vec![" L".blue().bold(), "ogs ".white().into()]);
+    let title = Line::from(vec![" L".blue().bold(), "ogs ".white()]);
 
     let mut block = Block::new().borders(Borders::ALL).title(title);
     let mut highlight_style = Style::new();
@@ -137,7 +138,7 @@ fn render_table(frame: &mut Frame, area: Rect, app: &App, table_state: &mut Tabl
         "<Enter> ".blue().bold(),
     ]);
 
-    let title = Line::from(vec![" C".blue().bold(), "ontainers ".white().into()]);
+    let title = Line::from(vec![" C".blue().bold(), "ontainers ".white()]);
 
     let mut block = Block::new()
         .borders(Borders::ALL)
@@ -157,4 +158,15 @@ fn render_table(frame: &mut Frame, area: Rect, app: &App, table_state: &mut Tabl
         .row_highlight_style(row_highlight_style);
 
     frame.render_stateful_widget(table, area, table_state);
+}
+
+fn render_controls(frame: &mut Frame, area: Rect, app: &App) {
+    let block = Block::new().borders(Borders::ALL).title(" Actions ");
+
+    let controls = Paragraph::new("hello")
+        .alignment(Alignment::Center)
+        .centered()
+        .block(block);
+
+    frame.render_widget(controls, area);
 }

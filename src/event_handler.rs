@@ -77,7 +77,7 @@ impl EventHandler {
             AppEvent::NewLogLine(line) => {
                 app.current_logs.push(line);
 
-                if app.log_autoscroll && app.current_logs.len() > 0 {
+                if app.log_autoscroll && !app.current_logs.is_empty() {
                     app.log_idx = app.current_logs.len() - 1;
                     ui_state.log_list.select(Some(app.log_idx));
                 }
@@ -112,36 +112,44 @@ impl EventHandler {
                         ui_state.container_table.select(Some(app.container_idx));
                     }
                     KeyCode::Char('l') => {
-                        if app.current_logs.len() > 0 {
+                        if !app.current_logs.is_empty() {
                             app.log_idx = app.current_logs.len() - 1;
                         }
                         ui_state.log_list.select_last();
                         app.active_view = View::Log;
                     }
-                    KeyCode::Char('s') => {
-                        if !app.containers.is_empty() {
-                            let container_id = app.containers[app.container_idx].id.clone();
-                            docker_handle.send_cmd(DockerCMD::StopContainer(container_id.clone()));
-                            app.transitioning_containers
-                                .insert(container_id, TransitioningState::Stopping);
-                        }
+                    KeyCode::Char('s')
+                        if !app.containers.is_empty()
+                            && !app
+                                .transitioning_containers
+                                .contains_key(&app.containers[app.container_idx].id) =>
+                    {
+                        let container_id = app.containers[app.container_idx].id.clone();
+                        docker_handle.send_cmd(DockerCMD::StopContainer(container_id.clone()));
+                        app.transitioning_containers
+                            .insert(container_id, TransitioningState::Stopping);
                     }
-                    KeyCode::Char('y') => {
-                        if !app.containers.is_empty() {
-                            let container_id = app.containers[app.container_idx].id.clone();
-                            docker_handle.send_cmd(DockerCMD::StartContainer(container_id.clone()));
-                            app.transitioning_containers
-                                .insert(container_id, TransitioningState::Starting);
-                        }
+                    KeyCode::Char('y')
+                        if !app.containers.is_empty()
+                            && !app
+                                .transitioning_containers
+                                .contains_key(&app.containers[app.container_idx].id) =>
+                    {
+                        let container_id = app.containers[app.container_idx].id.clone();
+                        docker_handle.send_cmd(DockerCMD::StartContainer(container_id.clone()));
+                        app.transitioning_containers
+                            .insert(container_id, TransitioningState::Starting);
                     }
-                    KeyCode::Char('r') => {
-                        if !app.containers.is_empty() {
-                            let container_id = app.containers[app.container_idx].id.clone();
-                            docker_handle
-                                .send_cmd(DockerCMD::RestartContainer(container_id.clone()));
-                            app.transitioning_containers
-                                .insert(container_id, TransitioningState::Restarting);
-                        }
+                    KeyCode::Char('r')
+                        if !app.containers.is_empty()
+                            && !app
+                                .transitioning_containers
+                                .contains_key(&app.containers[app.container_idx].id) =>
+                    {
+                        let container_id = app.containers[app.container_idx].id.clone();
+                        docker_handle.send_cmd(DockerCMD::RestartContainer(container_id.clone()));
+                        app.transitioning_containers
+                            .insert(container_id, TransitioningState::Restarting);
                     }
                     _ => {}
                 },
@@ -159,12 +167,10 @@ impl EventHandler {
                             app.log_autoscroll = true;
                         }
                     }
-                    KeyCode::Char('k') => {
-                        if app.log_idx > 0 {
-                            app.log_autoscroll = false;
-                            app.log_idx -= 1;
-                            ui_state.log_list.select_previous();
-                        }
+                    KeyCode::Char('k') if app.log_idx > 0 => {
+                        app.log_autoscroll = false;
+                        app.log_idx -= 1;
+                        ui_state.log_list.select_previous();
                     }
                     KeyCode::Char('c') => {
                         app.active_view = View::Containers;
