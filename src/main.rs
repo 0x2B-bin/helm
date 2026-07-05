@@ -55,9 +55,7 @@ fn transform_to_container_data(
     let id = container.id.unwrap_or_default();
     let status = container.status.unwrap_or_default();
     let image = container.image.unwrap_or_default();
-    let state = container
-        .state
-        .unwrap_or(ContainerSummaryStateEnum::EMPTY);
+    let state = container.state.unwrap_or(ContainerSummaryStateEnum::EMPTY);
     let state_string = format!("{}", state).to_lowercase();
     let mut cpu_percentage = "0.00%".to_string();
     let mut memory_usage = "0".to_string();

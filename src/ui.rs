@@ -5,7 +5,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Layout, Rect},
     style::{Color, Style, Stylize},
     text::Line,
-    widgets::{Block, Borders, Cell, List, ListState, Paragraph, Row, Table, TableState},
+    widgets::{Block, Borders, Cell, Clear, List, ListState, Paragraph, Row, Table, TableState},
 };
 
 pub fn render(frame: &mut Frame, app: &App, ui_state: &mut UiState) {
@@ -18,6 +18,9 @@ pub fn render(frame: &mut Frame, app: &App, ui_state: &mut UiState) {
     render_table(frame, containers_area, app, &mut ui_state.container_table);
     render_log(frame, bottom, app, &mut ui_state.log_list);
     render_controls(frame, control_area, app);
+    if let View::DeleteConfirm = app.active_view {
+        render_remove_popup(frame);
+    }
 }
 
 fn render_log(frame: &mut Frame, area: Rect, app: &App, list_state: &mut ListState) {
@@ -131,9 +134,7 @@ fn render_table(frame: &mut Frame, area: Rect, app: &App, table_state: &mut Tabl
 
     let title = Line::from(vec![" C".blue().bold(), "ontainers ".white()]);
 
-    let mut block = Block::new()
-        .borders(Borders::ALL)
-        .title(title);
+    let mut block = Block::new().borders(Borders::ALL).title(title);
 
     let mut row_highlight_style = Style::new().white();
     if let View::Containers = app.active_view {
@@ -151,18 +152,53 @@ fn render_table(frame: &mut Frame, area: Rect, app: &App, table_state: &mut Tabl
 }
 
 fn render_controls(frame: &mut Frame, area: Rect, app: &App) {
-    let block = Block::new()
-        .borders(Borders::ALL)
-        .title(" Actions ");
-    
+    let block = Block::new().borders(Borders::ALL).title(" Actions ");
+
     let controls = Paragraph::new(vec![
-            Line::from(vec!["[".into(), "s".blue(), "]".into(), " Start/Stop".into()]),
-            Line::from(vec!["[".into(), "r".blue(), "]".into(), " Restart".into()]),
-            Line::from(vec!["[".into(), "x".blue(), "]".into(), " Remove".into()])
-        
-        ])
-        .alignment(Alignment::Left)
-        .block(block);
+        Line::from(vec![
+            "[".into(),
+            "s".blue(),
+            "]".into(),
+            " Start/Stop".into(),
+        ]),
+        Line::from(vec!["[".into(), "r".blue(), "]".into(), " Restart".into()]),
+        Line::from(vec!["[".into(), "x".blue(), "]".into(), " Remove".into()]),
+    ])
+    .alignment(Alignment::Left)
+    .block(block);
 
     frame.render_widget(controls, area);
+}
+
+fn render_remove_popup(frame: &mut Frame) {
+    let popup_block = Block::default()
+        .title_top(" Remove Container ")
+        .borders(Borders::ALL)
+        .style(Style::default().on_dark_gray());
+
+    let p = Paragraph::new("Would you like to remove the container (Y/N)").block(popup_block);
+
+    let area = centered_rect(60, 25, frame.area());
+    frame.render_widget(Clear, area);
+    frame.render_widget(p, area);
+}
+
+fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+    let popup_layout = Layout::default()
+        .direction(ratatui::layout::Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
+        .split(r);
+
+    Layout::default()
+        .direction(ratatui::layout::Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(popup_layout[1])[1]
 }

@@ -6,6 +6,7 @@ use std::fmt;
 pub enum View {
     Containers,
     Log,
+    DeleteConfirm,
 }
 
 pub enum TransitioningState {

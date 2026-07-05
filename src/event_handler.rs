@@ -91,7 +91,7 @@ impl EventHandler {
                         ratatui::restore();
                         std::process::exit(0);
                     }
-                    KeyCode::Char('j') => {
+                    KeyCode::Char('j') | KeyCode::Down => {
                         if app.container_idx < app.containers.len() - 1 {
                             app.container_idx += 1;
                             app.current_logs.clear();
@@ -101,7 +101,7 @@ impl EventHandler {
                         }
                         ui_state.container_table.select(Some(app.container_idx));
                     }
-                    KeyCode::Char('k') => {
+                    KeyCode::Char('k') | KeyCode::Up => {
                         if app.container_idx > 0 {
                             app.container_idx -= 1;
                             app.current_logs.clear();
@@ -151,6 +151,9 @@ impl EventHandler {
                         app.transitioning_containers
                             .insert(container_id, TransitioningState::Restarting);
                     }
+                    KeyCode::Char('x') if !app.containers.is_empty() => {
+                        app.active_view = View::DeleteConfirm;
+                    }
                     _ => {}
                 },
                 View::Log => match key.code {
@@ -158,7 +161,7 @@ impl EventHandler {
                         ratatui::restore();
                         std::process::exit(0);
                     }
-                    KeyCode::Char('j') => {
+                    KeyCode::Char('j') | KeyCode::Down => {
                         if app.log_idx + 1 < app.current_logs.len() {
                             app.log_idx += 1;
                             ui_state.log_list.select_next();
@@ -167,12 +170,23 @@ impl EventHandler {
                             app.log_autoscroll = true;
                         }
                     }
-                    KeyCode::Char('k') if app.log_idx > 0 => {
+                    KeyCode::Char('k') | KeyCode::Up if app.log_idx > 0 => {
                         app.log_autoscroll = false;
                         app.log_idx -= 1;
                         ui_state.log_list.select_previous();
                     }
                     KeyCode::Char('c') => {
+                        app.active_view = View::Containers;
+                    }
+                    _ => {}
+                },
+                View::DeleteConfirm => match key.code {
+                    KeyCode::Char('y') => {
+                        let container_id = app.containers[app.container_idx].id.clone();
+                        docker_handle.send_cmd(DockerCMD::RemoveContainer(container_id.clone()));
+                        app.active_view = View::Containers;
+                    }
+                    KeyCode::Char('n') => {
                         app.active_view = View::Containers;
                     }
                     _ => {}
