@@ -37,7 +37,6 @@ enum AppEvent {
     ContainerLoad(Vec<ContainerData>),
     NewLogLine(String),
     TransitionComplete(String),
-    //#[allow(dead_code)]
     DockerError(String),
 }
 

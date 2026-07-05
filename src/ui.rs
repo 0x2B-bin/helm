@@ -15,9 +15,16 @@ pub fn render(frame: &mut Frame, app: &App, ui_state: &mut UiState) {
     let top_layout = Layout::horizontal([Constraint::Fill(1), Constraint::Max(22)]);
     let [containers_area, control_area] = top.layout(&top_layout);
 
+    let bottom_layout = Layout::vertical([Constraint::Fill(1), Constraint::Length(1)]);
+    let [log_area, error_area] = bottom.layout(&bottom_layout);
+
     render_table(frame, containers_area, app, &mut ui_state.container_table);
-    render_log(frame, bottom, app, &mut ui_state.log_list);
+    render_log(frame, log_area, app, &mut ui_state.log_list);
     render_controls(frame, control_area, app);
+
+    let error_text = Line::from(app.current_error.as_str());
+    frame.render_widget(error_text, error_area);
+
     if let View::DeleteConfirm = app.active_view {
         render_remove_popup(frame);
     }

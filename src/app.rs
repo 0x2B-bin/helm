@@ -23,6 +23,7 @@ pub struct App {
     pub log_idx: usize,
     pub active_view: View,
     pub transitioning_containers: HashMap<String, TransitioningState>,
+    pub current_error: String
 }
 
 #[derive(Default)]
@@ -41,6 +42,7 @@ impl App {
             log_idx: 0,
             active_view: View::Containers,
             transitioning_containers: HashMap::new(),
+            current_error: String::new(),
         }
     }
 }

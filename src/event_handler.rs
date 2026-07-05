@@ -84,6 +84,10 @@ impl EventHandler {
             }
             AppEvent::TransitionComplete(container_id) => {
                 let _ = app.transitioning_containers.remove(&container_id);
+            },
+            AppEvent::DockerError(err) => {
+                app.current_error.clear();
+                app.current_error.push_str(err.as_str())
             }
             AppEvent::Key(key) => match app.active_view {
                 View::Containers => match key.code {
