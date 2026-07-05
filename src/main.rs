@@ -120,7 +120,10 @@ fn transform_to_container_data(
 
 #[tokio::main]
 async fn main() {
-    let docker = Docker::connect_with_local_defaults().unwrap();
+    let docker = Docker::connect_with_local_defaults().unwrap_or_else(|_| {
+        println!("[ERR] Failed to connect to docker socket");
+        std::process::exit(1);
+    });
 
     let (tx, rx) = mpsc::channel::<AppEvent>(100);
 
