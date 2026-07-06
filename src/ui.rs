@@ -20,7 +20,7 @@ pub fn render(frame: &mut Frame, app: &App, ui_state: &mut UiState) {
 
     render_table(frame, containers_area, app, &mut ui_state.container_table);
     render_log(frame, log_area, app, &mut ui_state.log_list);
-    render_controls(frame, control_area, app);
+    render_controls(frame, control_area);
 
     let error_text = Line::from(app.current_error.as_str());
     frame.render_widget(error_text, error_area);
@@ -73,27 +73,27 @@ fn render_table(frame: &mut Frame, area: Rect, app: &App, table_state: &mut Tabl
             });
 
     for container in &app.containers {
-        let mut text_color = Style::new().light_blue();
-        let mut state = String::new();
 
-        if let Some(trans_state) = app.transitioning_containers.get(&container.id) {
-            state = format!("{}", trans_state);
+        let mut state_text_color = match container.state {
+            ContainerSummaryStateEnum::RUNNING => Style::new().green(),
+            ContainerSummaryStateEnum::DEAD | ContainerSummaryStateEnum::EXITED => {
+                Style::new().red()
+            }
+            ContainerSummaryStateEnum::PAUSED
+            | ContainerSummaryStateEnum::STOPPING
+            | ContainerSummaryStateEnum::RESTARTING => Style::new().yellow(),
+            ContainerSummaryStateEnum::EMPTY | ContainerSummaryStateEnum::CREATED => {
+                Style::new().cyan()
+            }
+            _ => Style::new(),
+        };
+
+        let state = if let Some(trans_state) = app.transitioning_containers.get(&container.id) {
+            state_text_color = Style::new().yellow();
+            format!("{}", trans_state)
         } else {
-            state = container.state_string.clone();
-            text_color = match container.state {
-                ContainerSummaryStateEnum::RUNNING => Style::new().green(),
-                ContainerSummaryStateEnum::DEAD | ContainerSummaryStateEnum::EXITED => {
-                    Style::new().red()
-                }
-                ContainerSummaryStateEnum::PAUSED
-                | ContainerSummaryStateEnum::STOPPING
-                | ContainerSummaryStateEnum::RESTARTING => Style::new().yellow(),
-                ContainerSummaryStateEnum::EMPTY | ContainerSummaryStateEnum::CREATED => {
-                    Style::new().cyan()
-                }
-                _ => Style::new(),
-            };
-        }
+            container.state_string.clone()
+        };
 
         if state.len() > state_max_width {
             state_max_width = state.len();
@@ -115,7 +115,7 @@ fn render_table(frame: &mut Frame, area: Rect, app: &App, table_state: &mut Tabl
 
         let row = Row::new(vec![
             Cell::from(container.name.as_str()),
-            Cell::from(state).style(text_color),
+            Cell::from(state).style(state_text_color),
             Cell::from(container.status.as_str()),
             Cell::from(container.cpu_percentage.as_str()),
             Cell::from(format!(
@@ -158,7 +158,7 @@ fn render_table(frame: &mut Frame, area: Rect, app: &App, table_state: &mut Tabl
     frame.render_stateful_widget(table, area, table_state);
 }
 
-fn render_controls(frame: &mut Frame, area: Rect, app: &App) {
+fn render_controls(frame: &mut Frame, area: Rect) {
     let block = Block::new().borders(Borders::ALL).title(" Actions ");
 
     let controls = Paragraph::new(vec![
